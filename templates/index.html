@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ticket Urgency Classifier</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 class="mb-4">Ticket Urgency Classifier</h1>
+        <form id="ticket-form">
+            <div class="mb-3">
+                <label for="subject" class="form-label">Subject</label>
+                <input type="text" class="form-control" id="subject" required>
+            </div>
+            <div class="mb-3">
+                <label for="body" class="form-label">Body</label>
+                <textarea class="form-control" id="body" rows="3" required></textarea>
+            </div>
+            <div class="mb-3">
+                <label for="queue" class="form-label">Queue</label>
+                <input type="text" class="form-control" id="queue">
+            </div>
+            <div class="mb-3">
+                <label for="type" class="form-label">Type</label>
+                <input type="text" class="form-control" id="type">
+            </div>
+            <div class="mb-3">
+                <label for="language" class="form-label">Language</label>
+                <input type="text" class="form-control" id="language">
+            </div>
+            <div class="mb-3">
+                <label for="tags" class="form-label">Tags (comma-separated)</label>
+                <input type="text" class="form-control" id="tags">
+            </div>
+            <button type="submit" class="btn btn-primary">Predict Urgency</button>
+        </form>
+        <div id="result" class="mt-4"></div>
+    </div>
+
+    <script>
+        document.getElementById('ticket-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const subject = document.getElementById('subject').value;
+            const body = document.getElementById('body').value;
+            const queue = document.getElementById('queue').value;
+            const type = document.getElementById('type').value;
+            const language = document.getElementById('language').value;
+            const tags = document.getElementById('tags').value.split(',').map(tag => tag.trim()).filter(tag => tag);
+
+            const response = await fetch('/predict', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    subject,
+                    body,
+                    queue,
+                    type,
+                    language,
+                    tags
+                })
+            });
+
+            const resultDiv = document.getElementById('result');
+            if (response.ok) {
+                const data = await response.json();
+                resultDiv.innerHTML = `
+                    <div class="alert alert-success">
+                        <h5>Prediction: \${data.human_readable_label}</h5>
+                        <p>Confidence: \${(data.confidence_score * 100).toFixed(2)}%</p>
+                    </div>
+                `;
+            } else {
+                const error = await response.json();
+                resultDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <h5>Error</h5>
+                        <p>\${error.detail}</p>
+                    </div>
+                `;
+            }
+        });
+    </script>
+</body>
+</html>

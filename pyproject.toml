@@ -27,6 +27,18 @@ dependencies = [
     "dvc>=3.62.0",
     "joblib>=1.5.1",
     "pandera>=0.26.0",
+    "datasets>=4.0.0",
+    "jupyterlab>=4.4.6",
+    "pyjanitor>=0.31.0",
+    "sentence-transformers==3.0.1",
+    "transformers==4.44.2",
+    "numpy>=2.2.6",
+    "pre-commit>=4.3.0",
+    "mlflow>=3.3.1",
+    "vadersentiment>=3.3.2",
+    "category-encoders>=2.8.1",
+    "lightgbm>=4.6.0",
+    "catboost>=1.2.8",
 ]
 
 
@@ -41,4 +53,3 @@ extend-select = ["I"]  # Add import sorting
 [tool.ruff.lint.isort]
 known-first-party = ["ticket_urgency_classifier"]
 force-sort-within-sections = true
-

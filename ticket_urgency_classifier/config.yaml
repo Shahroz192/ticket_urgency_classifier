@@ -1,0 +1,34 @@
+# Configuration file for ticket_urgency_classifier
+
+# Paths (relative to project root)
+data_dir: "data"
+raw_data_dir: "data/raw"
+interim_data_dir: "data/interim"
+processed_data_dir: "data/processed"
+external_data_dir: "data/external"
+models_dir: "models"
+reports_dir: "reports"
+figures_dir: "reports/figures"
+
+# Random Forest hyperparameters
+random_forest:
+  random_state: 42
+  class_weight: "balanced"
+
+# RandomizedSearchCV parameters
+random_search:
+  model__n_estimators:
+    min: 100
+    max: 400
+  model__max_depth: [10, 20, 30, null]
+  model__min_samples_split:
+    min: 2
+    max: 11
+  model__min_samples_leaf:
+    min: 1
+    max: 5
+  model__max_features: ["sqrt", "log2"]
+  n_iter: 15
+  scoring: "f1_weighted"
+  cv_folds: 5
+  random_state: 42
