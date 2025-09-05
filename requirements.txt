@@ -1,2 +1,23 @@
 # requirements.txt
+polars>=1.32.3
+pandas>=2.3.1
+fastapi>=0.116.1
+seaborn>=0.13.2
+matplotlib>=3.10.5
+scikit-learn>=1.7.1
+xgboost>=3.0.4
+dvc>=3.62.0
+joblib>=1.5.1
+pandera>=0.26.0
+datasets>=4.0.0
+pyjanitor>=0.31.0
+numpy>=2.2.6
+pre-commit>=4.3.0
+mlflow>=3.3.1
+vadersentiment>=3.3.2
+category-encoders>=2.8.1
+sentence-transformers==3.0.1
+transformers==4.44.2
+lightgbm>=4.6.0
+catboost>=1.2.8
 -e .
