@@ -41,6 +41,7 @@ dependencies = [
     "catboost>=1.2.8",
     "ruff>=0.12.12",
     "pytest>=8.4.2",
+    "dotenv>=0.9.9",
 ]
 
 
