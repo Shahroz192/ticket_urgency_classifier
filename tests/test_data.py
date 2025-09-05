@@ -13,16 +13,16 @@ def mock_dirs(tmp_path):
     """Create temporary directories for raw and interim data for testing."""
     raw_dir = tmp_path / "raw"
     raw_dir.mkdir()
-    interim_dir = tmp_path / "interim"
-    # The main function creates the interim dir, so we don't need to create it here.
-    return raw_dir, interim_dir
+    processed_dir = tmp_path / "processed"
+    processed_dir.mkdir()
+    return raw_dir, processed_dir
 
 
 @patch("ticket_urgency_classifier.dataset.load_dataset")
 def test_process_dataset_downloads_and_splits(mock_load_dataset, mock_dirs):
     """Test that the script downloads, processes, and splits data when no local file exists."""
     # Arrange
-    raw_dir, interim_dir = mock_dirs
+    raw_dir, processed_dir = mock_dirs
 
     # Mock the raw dataset that would be downloaded from Hugging Face
     # Ensure enough samples for stratification
@@ -41,7 +41,7 @@ def test_process_dataset_downloads_and_splits(mock_load_dataset, mock_dirs):
     # Patch the config paths to use our temporary directories
     with (
         patch("ticket_urgency_classifier.dataset.RAW_DATA_DIR", raw_dir),
-        patch("ticket_urgency_classifier.dataset.INTERIM_DATA_DIR", interim_dir),
+        patch("ticket_urgency_classifier.dataset.PROCESSED_DATA_DIR", processed_dir),
     ):
         # Act
         process_dataset()
@@ -51,8 +51,8 @@ def test_process_dataset_downloads_and_splits(mock_load_dataset, mock_dirs):
 
         # Check that the raw and interim files were created
         dataset_file = raw_dir / "dataset.csv"
-        train_file = interim_dir / "train_data.csv"
-        test_file = interim_dir / "test_data.csv"
+        train_file = processed_dir / "train.csv"
+        test_file = processed_dir / "test.csv"
 
         assert dataset_file.exists()
         assert train_file.exists()
@@ -78,7 +78,7 @@ def test_process_dataset_downloads_and_splits(mock_load_dataset, mock_dirs):
 def test_process_dataset_uses_existing_file(mock_load_dataset, mock_read_csv, mock_dirs):
     """Test that the script uses an existing local file instead of downloading."""
     # Arrange
-    raw_dir, interim_dir = mock_dirs
+    raw_dir, processed_dir = mock_dirs
     dataset_file = raw_dir / "dataset.csv"
     dataset_file.touch()  # Create a dummy file to simulate it already existing
 
@@ -95,7 +95,7 @@ def test_process_dataset_uses_existing_file(mock_load_dataset, mock_read_csv, mo
 
     with (
         patch("ticket_urgency_classifier.dataset.RAW_DATA_DIR", raw_dir),
-        patch("ticket_urgency_classifier.dataset.INTERIM_DATA_DIR", interim_dir),
+        patch("ticket_urgency_classifier.dataset.PROCESSED_DATA_DIR", processed_dir),
     ):
         # Act
         process_dataset()
@@ -104,8 +104,8 @@ def test_process_dataset_uses_existing_file(mock_load_dataset, mock_read_csv, mo
         mock_load_dataset.assert_not_called()
         mock_read_csv.assert_called_once_with(dataset_file)
 
-        train_file = interim_dir / "train_data.csv"
-        test_file = interim_dir / "test_data.csv"
+        train_file = processed_dir / "train.csv"
+        test_file = processed_dir / "test.csv"
 
         assert train_file.exists()
         assert test_file.exists()

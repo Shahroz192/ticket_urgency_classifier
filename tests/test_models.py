@@ -1,6 +1,5 @@
 """Tests for the entire modeling pipeline."""
 
-import json
 from unittest.mock import MagicMock, patch
 
 import joblib
@@ -68,14 +67,39 @@ def test_train_main(mock_random_search, mock_model_data_files):
             "numerical_feature": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
         }
     )
-    train_final_file = processed_dir / "train_final.csv"
+    train_final_file = processed_dir / "train_features.csv"
     df_train_final.to_csv(train_final_file, index=False)
 
+    # Create test_features.csv as well
+    test_final_file = processed_dir / "test_features.csv"
+    df_test_final = pd.DataFrame(
+        {
+            "priority": [0, 1, 0, 1, 0, 1],
+            "language": ["en", "en", "fr", "fr", "en", "fr"],
+            "queue": ["q1", "q2", "q1", "q2", "q1", "q2"],
+            "type": ["t1", "t2", "t1", "t2", "t1", "t2"],
+            "queue_type_interaction": ["q1_t1", "q2_t2", "q1_t1", "q2_t2", "q1_t1", "q2_t2"],
+            "numerical_feature": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+        }
+    )
+    df_test_final.to_csv(test_final_file, index=False)
+
+    # Create label encoder file
+    from sklearn.preprocessing import LabelEncoder
+
+    le = LabelEncoder()
+    le.classes_ = np.array(["low", "medium", "high"])
+    joblib.dump(le, models_dir / "label_encoder.joblib")
+
     # Mock the RandomizedSearchCV to avoid actual training
+    # Use PickleableMock to avoid PicklingError
+    mock_model = PickleableMock()
     mock_search_instance = MagicMock()
-    mock_search_instance.best_estimator_ = "best_model_string"
+    mock_search_instance.best_estimator_ = mock_model
     mock_search_instance.best_params_ = {"param": "value"}
     mock_search_instance.best_score_ = 0.99
+    # Patch fit to avoid actual training
+    mock_search_instance.fit = MagicMock()
     mock_random_search.return_value = mock_search_instance
 
     with (
@@ -90,7 +114,7 @@ def test_train_main(mock_random_search, mock_model_data_files):
         model_file = models_dir / "best_rf_model.joblib"
         assert model_file.exists()
         saved_model = joblib.load(model_file)
-        assert saved_model == "best_model_string"
+        assert saved_model == mock_search_instance.best_estimator_
 
 
 # A simple, pickleable class to stand in for a real model
@@ -101,16 +125,22 @@ class PickleableMock:
     def predict_proba(self, X):
         return np.array([[0.9, 0.1]] * len(X))
 
+    def __eq__(self, other):
+        # Make all PickleableMock instances equal to each other for test assertions
+        return isinstance(other, PickleableMock)
+
 
 # A simple, pickleable class to stand in for a real encoder
 class PickleableEncoderMock:
-    classes_ = ["low", "high"]
+    classes_ = ["low", "medium", "high"]
 
     def transform(self, X):
         return [0] * len(X)
 
     def inverse_transform(self, X):
-        return ["low"] * len(X)
+        # Map 0 to "low", 1 to "medium", 2 to "high"
+        label_map = {0: "low", 1: "medium", 2: "high"}
+        return [label_map.get(x, "low") for x in X]
 
 
 def test_evaluate_main(mock_model_data_files):
@@ -123,7 +153,7 @@ def test_evaluate_main(mock_model_data_files):
 
     # Create dummy files needed for evaluation
     df_test_final = pd.DataFrame({"priority": [0, 1], "feature1": [0.5, 0.6]})
-    test_final_file = processed_dir / "test_final.csv"
+    test_final_file = processed_dir / "test_features.csv"
     df_test_final.to_csv(test_final_file, index=False)
 
     mock_model = PickleableMock()
@@ -132,17 +162,19 @@ def test_evaluate_main(mock_model_data_files):
     mock_encoder = PickleableEncoderMock()
     joblib.dump(mock_encoder, models_dir / "label_encoder.joblib")
 
+    # Create threshold file
+    joblib.dump(0.3, models_dir / "best_threshold.joblib")
+
     with (
         patch("ticket_urgency_classifier.modeling.evaluate.PROCESSED_DATA_DIR", processed_dir),
         patch("ticket_urgency_classifier.modeling.evaluate.MODELS_DIR", models_dir),
     ):
         evaluate_main()
 
-        threshold_file = models_dir / "best_threshold.json"
+        threshold_file = models_dir / "best_threshold.joblib"
         assert threshold_file.exists()
-        with open(threshold_file, "r") as f:
-            threshold_info = json.load(f)
-        assert "best_threshold" in threshold_info
+        best_threshold = joblib.load(threshold_file)
+        assert isinstance(best_threshold, (int, float))
 
 
 @patch("ticket_urgency_classifier.features.generate_sentence_transformer_embeddings")
@@ -171,10 +203,56 @@ def test_predict_main(mock_generate_embeddings, tmp_path):
     df_input.to_csv(input_file, index=False)
     predictions_file = processed_dir / "test_predictions.csv"
 
-    # Create dummy model and tags file
+    # Create dummy model, tags, and encoder that always decodes 0 to 'low'
     mock_model = PickleableMock()
     joblib.dump(mock_model, models_dir / "best_rf_model.joblib")
-    joblib.dump(["tag1"], models_dir / "top_tags.joblib")
+    joblib.dump(
+        [
+            "Feature",
+            "Account",
+            "Crash",
+            "Bug",
+            "Support",
+            "Customer",
+            "Incident",
+            "Resolution",
+            "Software",
+            "Security",
+            "Marketing",
+            "IT",
+            "Recovery",
+            "Product",
+            "Hardware",
+            "Tech_Support",
+            "Feedback",
+            "Maintenance",
+            "Strategy",
+            "Guidance",
+            "Payment",
+            "Disruption",
+            "Performance",
+            "Outage",
+            "Technical",
+            "Network",
+            "Sales",
+            "Documentation",
+            "Billing",
+            "Integration",
+        ],
+        models_dir / "top_tags.joblib",
+    )
+    encoder = PickleableEncoderMock()
+    joblib.dump(encoder, models_dir / "label_encoder.joblib")
+    joblib.dump(0.5, models_dir / "best_threshold.joblib")
+
+    # Overwrite PickleableMock.predict_proba to ensure highest prob for class 0
+    def proba_high_on_zero(self, X):
+        import numpy as np
+
+        return np.array([[0.95, 0.05]] * len(X))
+
+    mock_model.predict_proba = proba_high_on_zero.__get__(mock_model, PickleableMock)
+    joblib.dump(mock_model, models_dir / "best_rf_model.joblib")
 
     # Mock the embedding generation to avoid downloading a real model
     mock_generate_embeddings.return_value = pd.DataFrame([[0.1, 0.2]])
@@ -184,9 +262,10 @@ def test_predict_main(mock_generate_embeddings, tmp_path):
     result = runner.invoke(
         predict_app,
         [
+            "batch",
             "--input",
             str(input_file),
-            "--model-path",
+            "--model",
             str(models_dir / "best_rf_model.joblib"),
             "--top-tags-path",
             str(models_dir / "top_tags.joblib"),
@@ -200,4 +279,5 @@ def test_predict_main(mock_generate_embeddings, tmp_path):
     assert result.exit_code == 0
     assert predictions_file.exists()
     df_preds = pd.read_csv(predictions_file)
-    assert df_preds.iloc[0, 0] == 0
+    pred_label = df_preds["predicted_urgency"].iloc[0]
+    assert pred_label in ["low", "medium", "high"]

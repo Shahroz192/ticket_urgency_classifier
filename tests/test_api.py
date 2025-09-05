@@ -5,30 +5,53 @@ from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
 import pandas as pd
 
-from ticket_urgency_classifier.api.main import app
-
 # Mock dependencies before importing the app to prevent file loading errors
 mock_model = MagicMock()
 mock_label_encoder = MagicMock()
 mock_top_tags = ["login", "payment", "urgent"]
+mock_threshold = 0.5
 
-# Patch joblib.load before the app is imported
-patcher = patch("joblib.load", side_effect=[mock_model, mock_label_encoder, mock_top_tags])
+
+# Mock the load_resources function to set the global variables directly
+def mock_load_resources():
+    pass
+
+
+# Patch utils' global references *before* importing the FastAPI app
+import sys  # noqa: E402
+
+mock_utils = sys.modules.get("ticket_urgency_classifier.api.utils")
+if mock_utils is not None:
+    mock_utils.model = mock_model
+    mock_utils.label_encoder = mock_label_encoder
+    mock_utils.top_tags = mock_top_tags
+    mock_utils.threshold = mock_threshold
+else:
+    import ticket_urgency_classifier.api.utils as utils
+
+    utils.model = mock_model
+    utils.label_encoder = mock_label_encoder
+    utils.top_tags = mock_top_tags
+    utils.threshold = mock_threshold
+
+from ticket_urgency_classifier.api.main import app  # noqa: E402
+
+patcher = patch("ticket_urgency_classifier.api.utils.load_resources", mock_load_resources)
 patcher.start()
 
 
-# Stop the patcher after the app is loaded and tests are done
+# Stop the patchers after the app is loaded and tests are done
 def teardown_module(module):
-    """Stop the patcher at the end of the module."""
+    """Stop the patchers at the end of the module."""
     patcher.stop()
 
 
 client = TestClient(app)
 
 
-@patch("ticket_urgency_classifier.api.generate_sentence_transformer_embeddings")
-@patch("ticket_urgency_classifier.api.add_tag_features")
-@patch("ticket_urgency_classifier.api.engineer_features")
+@patch("ticket_urgency_classifier.api.main.generate_sentence_transformer_embeddings")
+@patch("ticket_urgency_classifier.api.main.add_tag_features")
+@patch("ticket_urgency_classifier.api.main.engineer_features")
 def test_predict_success(mock_engineer_features, mock_add_tags, mock_generate_embeddings):
     """Test the /predict endpoint for a successful prediction."""
     # Arrange
@@ -37,8 +60,11 @@ def test_predict_success(mock_engineer_features, mock_add_tags, mock_generate_em
     mock_label_encoder.reset_mock()
 
     # Configure mock return values for a successful prediction
+    import numpy as np
+
     mock_model.predict.return_value = [0]  # Raw prediction for 'low'
-    mock_model.predict_proba.return_value.max.return_value = 0.95  # Confidence score
+    # Return probs for two classes (simulate a model with 0.95 for class0, 0.05 for class1)
+    mock_model.predict_proba.return_value = np.array([[0.95, 0.05]])
     mock_label_encoder.inverse_transform.return_value = ["low"]  # Human-readable label
 
     # Mock the feature engineering functions to return dummy dataframes
@@ -70,7 +96,7 @@ def test_predict_success(mock_engineer_features, mock_add_tags, mock_generate_em
 
 
 @patch(
-    "ticket_urgency_classifier.api.engineer_features",
+    "ticket_urgency_classifier.api.main.engineer_features",
     side_effect=Exception("Feature Engineering Failed"),
 )
 def test_predict_internal_error(mock_engineer_features):
@@ -90,4 +116,5 @@ def test_predict_internal_error(mock_engineer_features):
 
     # Assert
     assert response.status_code == 500
+    # It triggers a feature engineering error, not missing resources, so:
     assert response.json() == {"detail": "Internal server error"}
