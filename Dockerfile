@@ -11,7 +11,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 COPY requirements.txt .
 
 # Install Python dependencies
-RUN uv pip install -r --system requirements.txt
+RUN uv pip install --system -r requirements.txt
 
 # Copy the application code
 COPY ticket_urgency_classifier/ ./ticket_urgency_classifier/
