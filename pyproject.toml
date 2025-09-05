@@ -39,6 +39,7 @@ dependencies = [
     "category-encoders>=2.8.1",
     "lightgbm>=4.6.0",
     "catboost>=1.2.8",
+    "ruff>=0.12.12",
 ]
 
 
