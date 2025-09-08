@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 COPY pyproject.toml .
 COPY README.md .
+COPY LICENSE .
 COPY ticket_urgency_classifier/ ./ticket_urgency_classifier/
 COPY templates/ ./templates/
 
