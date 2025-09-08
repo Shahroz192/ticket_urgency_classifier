@@ -3,16 +3,21 @@ FROM python:3.10-slim
 WORKDIR /app
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     awscli \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
+
 RUN uv pip install --system -r requirements.txt
 
 COPY ticket_urgency_classifier/ ./ticket_urgency_classifier/
+
 COPY templates/ ./templates/
+
+COPY pyproject.toml ./
 
 COPY models/label_encoder.joblib ./models/
 COPY models/top_tags.joblib ./models/
