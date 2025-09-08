@@ -4,7 +4,7 @@ set -e
 echo "🚀 Starting app..."
 
 if [ "${SKIP_MODEL_DOWNLOAD}" = "true" ]; then
-    echo "⚠️  SKIP_MODEL_DOWNLOAD=true: Creating dummy model for testing..."
+    echo "SKIP_MODEL_DOWNLOAD=true: Creating dummy model for testing..."
     mkdir -p /app/models
     touch /app/models/best_rf_model.joblib
 else

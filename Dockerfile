@@ -11,12 +11,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY requirements.txt .
 COPY pyproject.toml .
+COPY ticket_urgency_classifier/ ./ticket_urgency_classifier/
+COPY templates/ ./templates/
 
 RUN uv pip install --system -r requirements.txt
-
-COPY ticket_urgency_classifier/ ./ticket_urgency_classifier/
-
-COPY templates/ ./templates/
 
 COPY models/label_encoder.joblib ./models/
 COPY models/top_tags.joblib ./models/
