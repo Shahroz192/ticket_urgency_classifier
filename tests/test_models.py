@@ -132,7 +132,7 @@ class PickleableMock:
 
 # A simple, pickleable class to stand in for a real encoder
 class PickleableEncoderMock:
-    classes_ = ["low", "medium", "high"]
+    classes_ = np.array(["low", "medium", "high"])
 
     def transform(self, X):
         return [0] * len(X)
@@ -141,6 +141,14 @@ class PickleableEncoderMock:
         # Map 0 to "low", 1 to "medium", 2 to "high"
         label_map = {0: "low", 1: "medium", 2: "high"}
         return [label_map.get(x, "low") for x in X]
+
+
+# A simple, pickleable class to stand in for a real model with predict_proba
+class PickleableMockWithProba(PickleableMock):
+    def predict_proba(self, X):
+        import numpy as np
+
+        return np.array([[0.95, 0.05]] * len(X))
 
 
 def test_evaluate_main(mock_model_data_files):
@@ -245,35 +253,32 @@ def test_predict_main(mock_generate_embeddings, tmp_path):
     joblib.dump(encoder, models_dir / "label_encoder.joblib")
     joblib.dump(0.5, models_dir / "best_threshold.joblib")
 
-    # Overwrite PickleableMock.predict_proba to ensure highest prob for class 0
-    def proba_high_on_zero(self, X):
-        import numpy as np
-
-        return np.array([[0.95, 0.05]] * len(X))
-
-    mock_model.predict_proba = proba_high_on_zero.__get__(mock_model, PickleableMock)
+    # Create a mock model with predict_proba method that ensures highest prob for class 0
+    mock_model = PickleableMockWithProba()
     joblib.dump(mock_model, models_dir / "best_rf_model.joblib")
 
     # Mock the embedding generation to avoid downloading a real model
     mock_generate_embeddings.return_value = pd.DataFrame([[0.1, 0.2]])
 
-    runner = CliRunner()
-    # Act
-    result = runner.invoke(
-        predict_app,
-        [
-            "batch",
-            "--input",
-            str(input_file),
-            "--model",
-            str(models_dir / "best_rf_model.joblib"),
-            "--top-tags-path",
-            str(models_dir / "top_tags.joblib"),
-            "--predictions-path",
-            str(predictions_file),
-        ],
-        catch_exceptions=False,
-    )
+    with (
+        patch("ticket_urgency_classifier.modeling.predict.MODELS_DIR", models_dir),
+        patch("ticket_urgency_classifier.modeling.predict.PROCESSED_DATA_DIR", processed_dir),
+    ):
+        runner = CliRunner()
+        # Act
+        result = runner.invoke(
+            predict_app,
+            [
+                "batch",
+                "--input",
+                str(input_file),
+                "--top-tags-path",
+                str(models_dir / "top_tags.joblib"),
+                "--predictions-path",
+                str(predictions_file),
+            ],
+            catch_exceptions=False,
+        )
 
     # Assert
     assert result.exit_code == 0

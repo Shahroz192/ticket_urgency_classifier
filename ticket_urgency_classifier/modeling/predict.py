@@ -23,19 +23,25 @@ def load_model(model_uri: str = "models:/ticket_urgency_classifier@challenger") 
     try:
         logger.info(f"Loading model from MLflow registry: {model_uri}...")
         model = mlflow.pyfunc.load_model(model_uri)
-        logger.success("Model loaded successfully from MLflow registry.")
-        return model
+        # Check if the model has predict_proba method
+        if hasattr(model, "predict_proba"):
+            logger.success("Model loaded successfully from MLflow registry.")
+            return model
+        else:
+            logger.warning(
+                "MLflow model doesn't have predict_proba method, falling back to local model file..."
+            )
     except Exception as e:
         logger.error(f"Failed to load model from registry: {e}")
         logger.info("Falling back to local model file...")
 
-        model_path = MODELS_DIR / "best_rf_model.joblib"
-        if model_path.exists():
-            model = joblib.load(model_path)
-            logger.success("Model loaded from local file as fallback.")
-            return model
-        else:
-            raise FileNotFoundError(f"Model not found in registry or locally: {model_uri}")
+    model_path = MODELS_DIR / "best_rf_model.joblib"
+    if model_path.exists():
+        model = joblib.load(model_path)
+        logger.success("Model loaded from local file as fallback.")
+        return model
+    else:
+        raise FileNotFoundError(f"Model not found in registry or locally: {model_uri}")
 
 
 def load_top_tags(top_tags_path: Path) -> List:
@@ -108,15 +114,29 @@ def predict(
         raise ValueError("No feature columns found for prediction.")
 
     logger.info("Making predictions...")
-    y_proba = model.predict_proba(X)
-
+    # Load label encoder first to determine number of classes
     label_encoder_path = MODELS_DIR / "label_encoder.joblib"
     label_encoder = load_label_encoder(label_encoder_path)
 
+    # Check if model has predict_proba method
+    if hasattr(model, "predict_proba"):
+        y_proba = model.predict_proba(X)
+    else:
+        logger.warning("Model doesn't have predict_proba method, using predict method instead.")
+        y_pred = model.predict(X)
+        n_classes = len(label_encoder.classes_)
+        y_proba = np.zeros((len(y_pred), n_classes))
+        for i, pred in enumerate(y_pred):
+            y_proba[i, pred] = 1.0
+
     class_names = label_encoder.classes_
     try:
-        low_class_index = np.where(class_names == "low")[0][0]
-    except IndexError:
+        low_class_indices = np.where(class_names == "low")[0]
+        if len(low_class_indices) > 0:
+            low_class_index = low_class_indices[0]
+        else:
+            raise ValueError("Could not find 'low' class in label encoder.")
+    except (IndexError, ValueError):
         logger.error("Error: Could not find 'low' class in label encoder.")
         raise
 
