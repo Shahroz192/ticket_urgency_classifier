@@ -17,7 +17,7 @@ COPY ticket_urgency_classifier/ ./ticket_urgency_classifier/
 
 COPY templates/ ./templates/
 
-COPY pyproject.toml ./
+COPY pyproject.toml .
 
 COPY models/label_encoder.joblib ./models/
 COPY models/top_tags.joblib ./models/
