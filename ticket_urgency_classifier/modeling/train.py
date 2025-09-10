@@ -115,7 +115,7 @@ def main():
             n_iter=random_search_config["n_iter"],
             scoring=random_search_config["scoring"],
             cv=cv,
-            n_jobs=1,
+            n_jobs=-1,
             verbose=2,
             random_state=random_search_config["random_state"],
         )

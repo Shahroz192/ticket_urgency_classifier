@@ -9,7 +9,12 @@ import torch
 import typer
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
-from ticket_urgency_classifier.config import INTERIM_DATA_DIR, MODELS_DIR, PROCESSED_DATA_DIR
+from ticket_urgency_classifier.config import (
+    INTERIM_DATA_DIR,
+    MODELS_DIR,
+    PROCESSED_DATA_DIR,
+    SENTENCE_TRANSFORMER_MODEL,
+)
 
 app = typer.Typer()
 
@@ -109,7 +114,7 @@ def generate_sentence_transformer_embeddings(
     # Generate embeddings (always in memory)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info(f"Using device: {device}")
-    embedder = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2", device=device)
+    embedder = SentenceTransformer(SENTENCE_TRANSFORMER_MODEL, device=device)
 
     text_embeddings = embedder.encode(
         df["full_text"].tolist(),

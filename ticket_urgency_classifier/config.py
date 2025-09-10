@@ -26,6 +26,8 @@ MODELS_DIR = PROJ_ROOT / config["models_dir"]
 
 REPORTS_DIR = PROJ_ROOT / config["reports_dir"]
 FIGURES_DIR = PROJ_ROOT / config["figures_dir"]
+SENTENCE_TRANSFORMER_MODEL = config["sentence_transformer_model"]
+
 
 # If tqdm is installed, configure loguru with tqdm.write
 # https://github.com/Delgan/loguru/issues/135

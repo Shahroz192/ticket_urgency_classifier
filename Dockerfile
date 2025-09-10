@@ -24,17 +24,20 @@ COPY models/best_threshold.joblib ./models/
 
 COPY start_app.sh .
 
-RUN mkdir -p ./models
 RUN chmod +x start_app.sh
+RUN chown root:root start_app.sh
+
+RUN mkdir -p ./models
 
 RUN useradd --create-home --shell /bin/bash app \
     && chown -R app:app /app
 
 USER app
 
+
 ENV MODEL_S3_URI="s3://ticket-classification-ml-models-bucket/ticket-urgency/v1/best_rf_model.joblib"
 ENV MODEL_PATH="/app/models/best_rf_model.joblib"
-ENV USE_LOCAL_MODEL="true"
+ENV USE_LOCAL_MODEL="false"
 
 EXPOSE 8000
 

@@ -1,5 +1,7 @@
+import os
 from typing import Any, List, Optional
 
+import boto3
 import joblib
 from loguru import logger
 import mlflow.pyfunc
@@ -22,25 +24,53 @@ threshold: Optional[float] = None
 def load_resources():
     """Load model, label encoder, top tags, and threshold with error handling."""
     global model, label_encoder, top_tags, threshold
-    try:
-        logger.info("Loading model from MLflow registry...")
-        model = mlflow.pyfunc.load_model("models:/ticket_urgency_classifier@challenger")
-        logger.success("Model loaded successfully from MLflow registry.")
-    except Exception as e:
-        logger.error(f"Failed to load model from registry: {e}")
-        logger.info("Falling back to local model file...")
-        # Fallback to local file if registry fails
-        if not model_path.exists():
-            logger.error(f"Model file not found: {model_path}")
+
+    model_s3_uri = os.environ.get("MODEL_S3_URI")
+    use_local_model = os.environ.get("USE_LOCAL_MODEL", "false").lower() == "true"
+
+    if use_local_model:
+        logger.info("USE_LOCAL_MODEL is true, skipping S3 and MLflow, loading from local file...")
+        try:
+            logger.info(f"Loading model from {model_path}...")
+            model = joblib.load(model_path)
+            logger.success("Model loaded from local file.")
+        except Exception as load_e:
+            logger.error(f"Failed to load model from local file: {load_e}")
             model = None
-        else:
-            try:
-                logger.info(f"Loading model from {model_path}...")
-                model = joblib.load(model_path)
-                logger.success("Model loaded from local file as fallback.")
-            except Exception as load_e:
-                logger.error(f"Failed to load model from local file: {load_e}")
+    elif model_s3_uri:
+        logger.info(f"Attempting to load model from S3 URI: {model_s3_uri}")
+        try:
+            s3 = boto3.client("s3")
+            bucket, key = model_s3_uri.replace("s3://", "").split("/", 1)
+            s3.download_file(bucket, key, str(model_path))
+            logger.info(f"Model downloaded from S3 to {model_path}")
+            model = joblib.load(model_path)
+            logger.success("Model loaded successfully from S3.")
+        except Exception as s3_e:
+            logger.error(f"Failed to load model from S3: {s3_e}")
+            model = None
+    else:
+        logger.info(
+            "MODEL_S3_URI not set and USE_LOCAL_MODEL is false, attempting to load from MLflow registry..."
+        )
+        try:
+            logger.info("Loading model from MLflow registry...")
+            model = mlflow.pyfunc.load_model("models:/ticket_urgency_classifier@challenger")
+            logger.success("Model loaded successfully from MLflow registry.")
+        except Exception as e:
+            logger.error(f"Failed to load model from registry: {e}")
+            logger.info("Falling back to local model file...")
+            if not model_path.exists():
+                logger.error(f"Model file not found: {model_path}")
                 model = None
+            else:
+                try:
+                    logger.info(f"Loading model from {model_path}...")
+                    model = joblib.load(model_path)
+                    logger.success("Model loaded from local file as fallback.")
+                except Exception as load_e:
+                    logger.error(f"Failed to load model from local file: {load_e}")
+                    model = None
 
     try:
         if not label_encoder_path.exists():
