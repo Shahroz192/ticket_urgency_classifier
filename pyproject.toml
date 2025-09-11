@@ -17,7 +17,6 @@ classifiers = [
 ]
 requires-python = "~=3.10.0"
 dependencies = [
-    "polars>=1.32.3",
     "pandas>=2.3.1",
     "fastapi>=0.116.1",
     "seaborn>=0.13.2",
@@ -29,7 +28,6 @@ dependencies = [
     "pandera>=0.26.0",
     "datasets>=4.0.0",
     "jupyterlab>=4.4.6",
-    "pyjanitor>=0.31.0",
     "sentence-transformers==3.0.1",
     "transformers==4.44.2",
     "numpy>=2.2.6",
@@ -37,8 +35,6 @@ dependencies = [
     "mlflow>=3.3.1",
     "vadersentiment>=3.3.2",
     "category-encoders>=2.8.1",
-    "lightgbm>=4.6.0",
-    "catboost>=1.2.8",
     "ruff>=0.12.12",
     "pytest>=8.4.2",
     "dotenv>=0.9.9",
