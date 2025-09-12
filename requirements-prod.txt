@@ -1,0 +1,17 @@
+# requirements-prod.txt
+-e .
+pandas
+fastapi
+scikit-learn
+joblib
+pandera
+sentence-transformers
+transformers
+numpy
+pydantic
+uvicorn
+scipy
+boto3
+vadersentiment
+category-encoders
+loguru

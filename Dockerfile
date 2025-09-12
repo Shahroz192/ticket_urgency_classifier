@@ -1,39 +1,43 @@
-FROM python:3.10-slim
-
-WORKDIR /app
-
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+FROM python:3.10-slim AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    awscli \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+
+WORKDIR /app
 COPY pyproject.toml .
-COPY README.md .
-COPY LICENSE .
-COPY ticket_urgency_classifier/ ./ticket_urgency_classifier/
-COPY templates/ ./templates/
+COPY requirements-prod.txt .
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN uv pip install --system -r requirements-prod.txt
 
-RUN uv pip install --system -r requirements.txt
 
-COPY models/label_encoder.joblib ./models/
-COPY models/top_tags.joblib ./models/
-COPY models/best_threshold.joblib ./models/
+FROM python:3.10-slim
 
-COPY start_app.sh .
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    awscli \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN chmod +x start_app.sh
-RUN chown root:root start_app.sh
+WORKDIR /app
 
-RUN mkdir -p ./models
+COPY --from=builder /opt/venv /opt/venv
+
+ENV PATH="/opt/venv/bin:$PATH"
 
 RUN useradd --create-home --shell /bin/bash app \
     && chown -R app:app /app
-
 USER app
 
+COPY ticket_urgency_classifier/ ./ticket_urgency_classifier/
+COPY templates/ ./templates/
+COPY models/label_encoder.joblib ./models/
+COPY models/top_tags.joblib ./models/
+COPY models/best_threshold.joblib ./models/
+COPY start_app.sh .
+
+RUN chmod +x start_app.sh
 
 ENV MODEL_S3_URI="s3://ticket-classification-ml-models-bucket/ticket-urgency/v1/best_rf_model.joblib"
 ENV MODEL_PATH="/app/models/best_rf_model.joblib"

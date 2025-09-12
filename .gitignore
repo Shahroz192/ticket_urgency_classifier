@@ -126,3 +126,6 @@ cython_debug/
 
 workspace/
 QWEN.md
+
+# Backup files
+*.bak

@@ -68,6 +68,8 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
-
 # Data files (if large datasets exist)
 data/
+
+# Dockerfile backup
+Dockerfile.bak
