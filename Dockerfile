@@ -35,10 +35,6 @@ COPY templates/ ./templates/
 COPY models/label_encoder.joblib ./models/
 COPY models/top_tags.joblib ./models/
 COPY models/best_threshold.joblib ./models/
-COPY start_app.sh .
-
-# Make the startup script executable
-RUN chmod +x start_app.sh
 
 # Create and switch to a non-root user for security
 RUN useradd --create-home --shell /bin/bash app \
@@ -51,4 +47,4 @@ ENV USE_LOCAL_MODEL="false"
 
 EXPOSE 8000
 
-CMD ["./start_app.sh"]
+CMD ["/opt/venv/bin/uvicorn", "ticket_urgency_classifier.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
