@@ -9,6 +9,9 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 WORKDIR /app
 COPY pyproject.toml .
 COPY requirements-prod.txt .
+COPY README.md .
+COPY LICENSE .
+COPY ticket_urgency_classifier/ ./ticket_urgency_classifier/
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 RUN uv pip install --system -r requirements-prod.txt
