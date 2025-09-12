@@ -12,16 +12,12 @@ COPY requirements-prod.txt .
 COPY README.md .
 COPY LICENSE .
 COPY ticket_urgency_classifier/ ./ticket_urgency_classifier/
-RUN python -m venv /opt/venv
+RUN uv venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-RUN uv pip install --system -r requirements-prod.txt
+RUN uv pip install -r requirements-prod.txt
 
 
 FROM python:3.10-slim
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    awscli \
-    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -29,7 +25,6 @@ COPY --from=builder /opt/venv /opt/venv
 
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Copy application code first
 COPY ticket_urgency_classifier/ ./ticket_urgency_classifier/
 COPY templates/ ./templates/
 COPY models/label_encoder.joblib ./models/
