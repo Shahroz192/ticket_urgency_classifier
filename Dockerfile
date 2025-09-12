@@ -29,10 +29,7 @@ COPY --from=builder /opt/venv /opt/venv
 
 ENV PATH="/opt/venv/bin:$PATH"
 
-RUN useradd --create-home --shell /bin/bash app \
-    && chown -R app:app /app
-USER app
-
+# Copy application code first
 COPY ticket_urgency_classifier/ ./ticket_urgency_classifier/
 COPY templates/ ./templates/
 COPY models/label_encoder.joblib ./models/
@@ -40,7 +37,13 @@ COPY models/top_tags.joblib ./models/
 COPY models/best_threshold.joblib ./models/
 COPY start_app.sh .
 
+# Make the startup script executable
 RUN chmod +x start_app.sh
+
+# Create and switch to a non-root user for security
+RUN useradd --create-home --shell /bin/bash app \
+    && chown -R app:app /app
+USER app
 
 ENV MODEL_S3_URI="s3://ticket-classification-ml-models-bucket/ticket-urgency/v1/best_rf_model.joblib"
 ENV MODEL_PATH="/app/models/best_rf_model.joblib"
