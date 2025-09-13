@@ -21,6 +21,7 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
+# Copy the entire virtual environment from the builder stage
 COPY --from=builder /opt/venv /opt/venv
 
 ENV PATH="/opt/venv/bin:$PATH"
@@ -42,4 +43,5 @@ ENV USE_LOCAL_MODEL="false"
 
 EXPOSE 8000
 
-CMD ["/opt/venv/bin/uvicorn", "ticket_urgency_classifier.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Use the python module approach to run uvicorn
+CMD ["python", "-m", "uvicorn", "ticket_urgency_classifier.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
