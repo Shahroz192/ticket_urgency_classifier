@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from loguru import logger
+import numpy as np
 import pandas as pd
 
 from ticket_urgency_classifier.api.models import PredictionResponse, TicketData
@@ -40,11 +41,9 @@ async def predict(ticket: TicketData):
         raise HTTPException(status_code=500, detail="Model resources not available")
 
     try:
-        # Prepare tags: fill to 8 with empty strings if necessary
         tags_padded = ticket.tags + [""] * (8 - len(ticket.tags))
         tag_dict = {f"tag_{i + 1}": tag for i, tag in enumerate(tags_padded)}
 
-        # Create a DataFrame from the input data
         df = pd.DataFrame(
             [
                 {
@@ -67,28 +66,53 @@ async def predict(ticket: TicketData):
         logger.info("Generating sentence transformer embeddings...")
         df_embeddings = generate_sentence_transformer_embeddings(df, "")
 
-        # Concatenate features
         df_final = pd.concat([df, df_embeddings], axis=1)
 
-        # Drop non-feature columns
         cols_to_drop = ["subject", "body", "full_text"] + [f"tag_{i}" for i in range(1, 9)]
         df_final.drop(columns=cols_to_drop, errors="ignore", inplace=True)
 
-        # Perform prediction using threshold
         logger.info("Performing prediction with threshold...")
-        probabilities = model.predict_proba(df_final)[:, 1]
-        prediction = (probabilities >= threshold).astype(int)[0]
-        confidence_score = probabilities[0] if prediction == 1 else 1 - probabilities[0]
 
-        # Convert raw prediction to human-readable label
-        human_readable_label = label_encoder.inverse_transform([prediction])[0]
+        # Get multi-class probabilities (shape: 1 x n_classes)
+        if hasattr(model, "predict_proba"):
+            y_proba = model.predict_proba(df_final)
+        else:
+            logger.warning("Model doesn't have predict_proba, using predict instead.")
+            y_pred_fallback = model.predict(df_final)
+            n_classes = len(label_encoder.classes_)
+            y_proba = np.zeros((1, n_classes))
+            y_proba[0, y_pred_fallback[0]] = 1.0
+
+        class_names = label_encoder.classes_
+        default_class = "low"
+        default_idx = list(class_names).index(default_class)
+
+        # Per-class threshold logic (same as modeling/predict.py)
+        pred_idx = default_idx
+        if isinstance(threshold, dict):
+            for class_name, thresh_val in threshold.items():
+                if class_name == default_class:
+                    continue
+                class_idx = list(class_names).index(class_name)
+                if y_proba[0, class_idx] >= thresh_val:
+                    pred_idx = class_idx
+        else:
+            # Scalar threshold: default to 'low', fall through to highest non-low prob
+            if not (y_proba[0, default_idx] >= threshold):
+                temp_proba = y_proba[0].copy()
+                temp_proba[default_idx] = 0
+                pred_idx = int(np.argmax(temp_proba))
+
+        # Confidence score: probability of the predicted class
+        confidence_score = float(y_proba[0, pred_idx])
+        human_readable_label = label_encoder.inverse_transform([pred_idx])[0]
 
         logger.success(
             f"Prediction successful: {human_readable_label} with confidence {confidence_score:.2f}"
         )
 
         return PredictionResponse(
-            raw_prediction=int(prediction),
+            raw_prediction=int(pred_idx),
             human_readable_label=human_readable_label,
             confidence_score=float(confidence_score),
         )

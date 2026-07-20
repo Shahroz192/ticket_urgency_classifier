@@ -6,10 +6,13 @@ from fastapi.testclient import TestClient
 import pandas as pd
 
 # Mock dependencies before importing the app to prevent file loading errors
+import numpy as np
+
 mock_model = MagicMock()
 mock_label_encoder = MagicMock()
+mock_label_encoder.classes_ = np.array(['critical', 'high', 'low', 'medium', 'very_low'])
 mock_top_tags = ["login", "payment", "urgent"]
-mock_threshold = 0.5
+mock_threshold = {'critical': 0.26, 'high': 0.36, 'medium': 0.4, 'very_low': 0.3}
 
 
 # Mock the load_resources function to set the global variables directly
@@ -60,12 +63,11 @@ def test_predict_success(mock_engineer_features, mock_add_tags, mock_generate_em
     mock_label_encoder.reset_mock()
 
     # Configure mock return values for a successful prediction
-    import numpy as np
-
-    mock_model.predict.return_value = [0]  # Raw prediction for 'low'
-    # Return probs for two classes (simulate a model with 0.95 for class0, 0.05 for class1)
-    mock_model.predict_proba.return_value = np.array([[0.95, 0.05]])
-    mock_label_encoder.inverse_transform.return_value = ["low"]  # Human-readable label
+    # 5-class probabilities: [critical, high, low, medium, very_low]
+    # 'critical' prob (0.85) >= threshold 0.26 → predicts critical
+    mock_model.predict.return_value = [0]
+    mock_model.predict_proba.return_value = np.array([[0.85, 0.05, 0.05, 0.03, 0.02]])
+    mock_label_encoder.inverse_transform.return_value = ["critical"]
 
     # Mock the feature engineering functions to return dummy dataframes
     mock_engineer_features.return_value = pd.DataFrame([{"full_text": "test"}])
@@ -87,9 +89,10 @@ def test_predict_success(mock_engineer_features, mock_add_tags, mock_generate_em
     # Assert
     assert response.status_code == 200
     data = response.json()
+    # critical class is at index 0, its prob 0.85 >= 0.26 threshold
     assert data["raw_prediction"] == 0
-    assert data["human_readable_label"] == "low"
-    assert data["confidence_score"] == 0.95
+    assert data["human_readable_label"] == "critical"
+    assert data["confidence_score"] == 0.85
     mock_engineer_features.assert_called_once()
     mock_add_tags.assert_called_once()
     mock_generate_embeddings.assert_called_once()

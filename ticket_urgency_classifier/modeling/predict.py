@@ -74,11 +74,14 @@ def load_label_encoder(label_encoder_path: Path) -> Any:
         raise
 
 
-def load_threshold(threshold_path: Path) -> float:
-    """Load the threshold from the specified path with error handling."""
+def load_threshold(threshold_path: Path) -> dict | float:
+    """Load the threshold(s) from the specified path with error handling.
+
+    Returns a dict of per-class thresholds or a scalar for backward compat.
+    """
     if not threshold_path.exists():
         logger.warning(f"Threshold file not found: {threshold_path}. Using default 0.5.")
-        return 0.5
+        return {"low": 0.5}
     try:
         logger.info(f"Loading threshold from {threshold_path}...")
         threshold = joblib.load(threshold_path)
@@ -86,17 +89,17 @@ def load_threshold(threshold_path: Path) -> float:
         return threshold
     except Exception as e:
         logger.error(f"Failed to load threshold: {e}")
-        return 0.5
+        return {"low": 0.5}
 
 
 def predict(
     df: pd.DataFrame,
     model: Any,
     top_tags: List,
-    threshold: float,
+    threshold: dict | float,
 ) -> np.ndarray:
     """
-    Predict ticket urgency using the trained model and a custom threshold.
+    Predict ticket urgency using the trained model and per-class thresholds.
     """
     logger.info("Engineering features for prediction...")
     df = engineer_features(df.copy())
@@ -114,11 +117,9 @@ def predict(
         raise ValueError("No feature columns found for prediction.")
 
     logger.info("Making predictions...")
-    # Load label encoder first to determine number of classes
     label_encoder_path = MODELS_DIR / "label_encoder.joblib"
     label_encoder = load_label_encoder(label_encoder_path)
 
-    # Check if model has predict_proba method
     if hasattr(model, "predict_proba"):
         y_proba = model.predict_proba(X)
     else:
@@ -130,29 +131,31 @@ def predict(
             y_proba[i, pred] = 1.0
 
     class_names = label_encoder.classes_
-    try:
-        low_class_indices = np.where(class_names == "low")[0]
-        if len(low_class_indices) > 0:
-            low_class_index = low_class_indices[0]
-        else:
-            raise ValueError("Could not find 'low' class in label encoder.")
-    except (IndexError, ValueError):
-        logger.error("Error: Could not find 'low' class in label encoder.")
-        raise
 
-    y_pred = np.zeros(len(X), dtype=int)
-
-    low_mask = y_proba[:, low_class_index] >= threshold
-
-    y_pred[low_mask] = low_class_index
-
-    not_low_mask = ~low_mask
-    temp_proba = y_proba[not_low_mask].copy()
-    temp_proba[:, low_class_index] = 0
-
-    if temp_proba.shape[0] > 0:
-        remaining_preds = np.argmax(temp_proba, axis=1)
-        y_pred[not_low_mask] = remaining_preds
+    if isinstance(threshold, dict):
+        default_class = "low"
+        if default_class not in class_names:
+            raise ValueError(f"Default class '{default_class}' not found.")
+        default_idx = list(class_names).index(default_class)
+        y_pred = np.full(len(X), default_idx, dtype=int)
+        for class_name, thresh_val in threshold.items():
+            if class_name == default_class:
+                continue
+            class_idx = list(class_names).index(class_name)
+            mask = y_proba[:, class_idx] >= thresh_val
+            y_pred[mask] = class_idx
+    else:
+        default_class = "low"
+        default_idx = list(class_names).index(default_class)
+        y_pred = np.full(len(X), default_idx, dtype=int)
+        low_mask = y_proba[:, default_idx] >= threshold
+        y_pred[low_mask] = default_idx
+        not_low_mask = ~low_mask
+        temp_proba = y_proba[not_low_mask].copy()
+        temp_proba[:, default_idx] = 0
+        if temp_proba.shape[0] > 0:
+            remaining_preds = np.argmax(temp_proba, axis=1)
+            y_pred[not_low_mask] = remaining_preds
 
     logger.success("Predictions made successfully.")
     return y_pred
@@ -217,6 +220,7 @@ def predict_single(
     label_encoder = load_label_encoder(label_encoder_path)
     threshold = load_threshold(threshold_path)
 
+    tags = tags[:8]  # Clamp to max 8 tags
     tags_padded = tags + [""] * (8 - len(tags))
     tag_dict = {f"tag_{i + 1}": tag for i, tag in enumerate(tags_padded)}
 

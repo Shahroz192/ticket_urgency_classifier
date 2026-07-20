@@ -38,7 +38,6 @@ RUN useradd --create-home --shell /bin/bash app \
 USER app
 
 ENV MODEL_S3_URI="s3://ticket-classification-ml-models-bucket/ticket-urgency/v1/best_rf_model.joblib"
-ENV MODEL_PATH="/app/models/best_rf_model.joblib"
 ENV USE_LOCAL_MODEL="false"
 
 EXPOSE 8000

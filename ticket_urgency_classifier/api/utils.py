@@ -18,7 +18,7 @@ threshold_path = MODELS_DIR / "best_threshold.joblib"
 model: Optional[Any] = None
 label_encoder: Optional[Any] = None
 top_tags: Optional[List[str]] = None
-threshold: Optional[float] = None
+threshold: Optional[dict] = None
 
 
 def load_resources():
@@ -94,7 +94,7 @@ def load_resources():
 
     try:
         if not threshold_path.exists():
-            logger.warning(f"Threshold file not found: {threshold_path}. Using default 0.5.")
+            logger.warning(f"Threshold file not found: {threshold_path}. Using default scalar 0.5.")
             threshold = 0.5
         else:
             logger.info(f"Loading threshold from {threshold_path}...")

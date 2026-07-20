@@ -4,7 +4,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 import typer
 
-from ticket_urgency_classifier.config import PROCESSED_DATA_DIR, RAW_DATA_DIR
+from ticket_urgency_classifier.config import INTERIM_DATA_DIR, RAW_DATA_DIR
 
 app = typer.Typer()
 
@@ -29,7 +29,7 @@ def main():
     # 2. Data Cleaning
     logger.info("Cleaning data...")
     df = df_raw.copy()
-    df.drop(columns=["version", "answer"], inplace=True)
+    df.drop(columns=["version", "answer"], inplace=True, errors="ignore")
     df.drop_duplicates(inplace=True)
     df.reset_index(drop=True, inplace=True)
     logger.info(f"Data shape after cleaning: {df.shape}")
@@ -43,9 +43,9 @@ def main():
     logger.info(f"Test set size: {df_test.shape}")
 
     # 4. Save interim files
-    PROCESSED_DATA_DIR.mkdir(parents=True, exist_ok=True)  # Ensure directory exists
-    train_file = PROCESSED_DATA_DIR / "train.csv"
-    test_file = PROCESSED_DATA_DIR / "test.csv"
+    INTERIM_DATA_DIR.mkdir(parents=True, exist_ok=True)  # Ensure directory exists
+    train_file = INTERIM_DATA_DIR / "train.csv"
+    test_file = INTERIM_DATA_DIR / "test.csv"
 
     df_train.to_csv(train_file, index=False)
     df_test.to_csv(test_file, index=False)
