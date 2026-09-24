@@ -6,11 +6,13 @@ import joblib
 import numpy as np
 import pandas as pd
 import pytest
+from sklearn.dummy import DummyClassifier
 from typer.testing import CliRunner
 
 from ticket_urgency_classifier.modeling.predict import (
     app as predict_app,
 )
+from ticket_urgency_classifier.modeling.train import _split_for_threshold_calibration
 from ticket_urgency_classifier.modeling.train import main as train_main
 
 
@@ -88,12 +90,17 @@ def test_train_main(mock_random_search, mock_model_data_files):
     from sklearn.preprocessing import LabelEncoder
 
     le = LabelEncoder()
-    le.classes_ = np.array(["low", "medium", "high"])
+    le.classes_ = np.array(["critical", "high", "low", "medium", "very_low"])
     joblib.dump(le, models_dir / "label_encoder.joblib")
 
     # Mock the RandomizedSearchCV to avoid actual training
-    # Use PickleableMock to avoid PicklingError
-    mock_model = PickleableMock()
+    # Use a real sklearn estimator so MLflow can serialize it
+    # Fit with 5 classes so predict_proba returns 5 columns matching the label encoder
+    mock_model = DummyClassifier(strategy="prior")
+    mock_model.fit(
+        np.array([[0.1, 0.2, 0.3, 0.4, 0.5]] * 5),
+        np.array([0, 1, 2, 3, 4])
+    )
     mock_search_instance = MagicMock()
     mock_search_instance.best_estimator_ = mock_model
     mock_search_instance.best_params_ = {"param": "value"}
@@ -110,11 +117,28 @@ def test_train_main(mock_random_search, mock_model_data_files):
 
         mock_random_search.assert_called_once()
         mock_search_instance.fit.assert_called_once()
-
         model_file = models_dir / "best_rf_model.joblib"
         assert model_file.exists()
         saved_model = joblib.load(model_file)
-        assert saved_model == mock_search_instance.best_estimator_
+        X_test = np.array([[0.1, 0.2, 0.3, 0.4, 0.5]])
+        np.testing.assert_array_equal(
+            saved_model.predict(X_test),
+            mock_model.predict(X_test),
+        )
+
+
+def test_threshold_calibration_split_is_stratified_and_disjoint():
+    X_train = pd.DataFrame({"row_id": range(20)})
+    y_train = pd.Series([0] * 10 + [1] * 10)
+
+    X_fit, X_calibration, y_fit, y_calibration = _split_for_threshold_calibration(
+        X_train, y_train, random_state=7
+    )
+
+    assert set(X_fit.row_id).isdisjoint(X_calibration.row_id)
+    assert set(X_fit.row_id) | set(X_calibration.row_id) == set(X_train.row_id)
+    assert y_calibration.value_counts().to_dict() == {0: 2, 1: 2}
+    assert len(y_fit) == 16
 
 
 # A simple, pickleable class to stand in for a real model
@@ -123,7 +147,9 @@ class PickleableMock:
         return np.array([0] * len(X))
 
     def predict_proba(self, X):
-        return np.array([[0.9, 0.1]] * len(X))
+        # Return 5-class probabilities (matches 5 classes in label encoder)
+        # Class 0 (critical) has highest probability
+        return np.array([[0.9, 0.05, 0.02, 0.02, 0.01]] * len(X))
 
     def __eq__(self, other):
         # Make all PickleableMock instances equal to each other for test assertions
@@ -132,14 +158,14 @@ class PickleableMock:
 
 # A simple, pickleable class to stand in for a real encoder
 class PickleableEncoderMock:
-    classes_ = np.array(["low", "medium", "high"])
+    classes_ = np.array(["critical", "high", "low", "medium", "very_low"])
 
     def transform(self, X):
         return [0] * len(X)
 
     def inverse_transform(self, X):
-        # Map 0 to "low", 1 to "medium", 2 to "high"
-        label_map = {0: "low", 1: "medium", 2: "high"}
+        # Map 0->critical, 1->high, 2->low, 3->medium, 4->very_low
+        label_map = {0: "critical", 1: "high", 2: "low", 3: "medium", 4: "very_low"}
         return [label_map.get(x, "low") for x in X]
 
 
@@ -148,7 +174,9 @@ class PickleableMockWithProba(PickleableMock):
     def predict_proba(self, X):
         import numpy as np
 
-        return np.array([[0.95, 0.05]] * len(X))
+        # Return 5-class probabilities (matches 5 classes in label encoder)
+        # Class 0 (critical) has highest probability
+        return np.array([[0.95, 0.02, 0.01, 0.01, 0.01]] * len(X))
 
 
 def test_evaluate_main(mock_model_data_files):
@@ -160,7 +188,11 @@ def test_evaluate_main(mock_model_data_files):
     _, processed_dir, models_dir = mock_model_data_files
 
     # Create dummy files needed for evaluation
-    df_test_final = pd.DataFrame({"priority": [0, 1], "feature1": [0.5, 0.6]})
+    # Use all 5 class labels matching the label encoder
+    df_test_final = pd.DataFrame({
+        "priority": [0, 1, 2, 3, 4],
+        "feature1": [0.5, 0.6, 0.7, 0.8, 0.9],
+    })
     test_final_file = processed_dir / "test_features.csv"
     df_test_final.to_csv(test_final_file, index=False)
 
@@ -171,7 +203,7 @@ def test_evaluate_main(mock_model_data_files):
     joblib.dump(mock_encoder, models_dir / "label_encoder.joblib")
 
     # Create threshold file
-    joblib.dump(0.3, models_dir / "best_threshold.joblib")
+    joblib.dump({"low": 0.3, "critical": 0.3, "medium": 0.4}, models_dir / "best_threshold.joblib")
 
     with (
         patch("ticket_urgency_classifier.modeling.evaluate.PROCESSED_DATA_DIR", processed_dir),
@@ -182,7 +214,7 @@ def test_evaluate_main(mock_model_data_files):
         threshold_file = models_dir / "best_threshold.joblib"
         assert threshold_file.exists()
         best_threshold = joblib.load(threshold_file)
-        assert isinstance(best_threshold, (int, float))
+        assert isinstance(best_threshold, dict)
 
 
 @patch("ticket_urgency_classifier.features.generate_sentence_transformer_embeddings")
@@ -251,7 +283,7 @@ def test_predict_main(mock_generate_embeddings, tmp_path):
     )
     encoder = PickleableEncoderMock()
     joblib.dump(encoder, models_dir / "label_encoder.joblib")
-    joblib.dump(0.5, models_dir / "best_threshold.joblib")
+    joblib.dump({"low": 0.5}, models_dir / "best_threshold.joblib")
 
     # Create a mock model with predict_proba method that ensures highest prob for class 0
     mock_model = PickleableMockWithProba()
@@ -285,4 +317,4 @@ def test_predict_main(mock_generate_embeddings, tmp_path):
     assert predictions_file.exists()
     df_preds = pd.read_csv(predictions_file)
     pred_label = df_preds["predicted_urgency"].iloc[0]
-    assert pred_label in ["low", "medium", "high"]
+    assert pred_label in ["critical", "high", "low", "medium", "very_low"]

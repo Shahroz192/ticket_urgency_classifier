@@ -39,7 +39,7 @@ def feature_pipeline():
 
 @app.command()
 def full_pipeline():
-    """Run the full pipeline: raw validation -> dataset -> features -> processed validation -> prepare-model-data -> train -> evaluate."""
+    """Run the full pipeline: raw validation -> dataset -> features -> processed validation -> train -> evaluate."""
     # Run raw validation
     from ticket_urgency_classifier.validate import raw as validate_raw
 
@@ -59,11 +59,6 @@ def full_pipeline():
     from ticket_urgency_classifier.validate import processed as validate_processed
 
     validate_processed()
-
-    # Run data preparation for modeling
-    from ticket_urgency_classifier.prepare_model_data import main as prepare_model_data_main
-
-    prepare_model_data_main()
 
     # Run model training
     from ticket_urgency_classifier.modeling.train import main as train_main

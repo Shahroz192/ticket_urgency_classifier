@@ -17,6 +17,7 @@ from ticket_urgency_classifier.features import (
     engineer_features,
     generate_sentence_transformer_embeddings,
 )
+from ticket_urgency_classifier.modeling.thresholds import apply_thresholds
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -83,25 +84,8 @@ async def predict(ticket: TicketData):
             y_proba = np.zeros((1, n_classes))
             y_proba[0, y_pred_fallback[0]] = 1.0
 
-        class_names = label_encoder.classes_
-        default_class = "low"
-        default_idx = list(class_names).index(default_class)
-
-        # Per-class threshold logic (same as modeling/predict.py)
-        pred_idx = default_idx
-        if isinstance(threshold, dict):
-            for class_name, thresh_val in threshold.items():
-                if class_name == default_class:
-                    continue
-                class_idx = list(class_names).index(class_name)
-                if y_proba[0, class_idx] >= thresh_val:
-                    pred_idx = class_idx
-        else:
-            # Scalar threshold: default to 'low', fall through to highest non-low prob
-            if not (y_proba[0, default_idx] >= threshold):
-                temp_proba = y_proba[0].copy()
-                temp_proba[default_idx] = 0
-                pred_idx = int(np.argmax(temp_proba))
+        class_names = list(label_encoder.classes_)
+        pred_idx = int(apply_thresholds(y_proba, threshold, class_names)[0])
 
         # Confidence score: probability of the predicted class
         confidence_score = float(y_proba[0, pred_idx])

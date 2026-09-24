@@ -1,0 +1,1 @@
+use uv to manage dependencies and run the project

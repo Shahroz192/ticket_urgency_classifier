@@ -84,10 +84,10 @@ features: data
 	$(PYTHON_INTERPRETER) -m ticket_urgency_classifier features
 
 
-## Make model
+## Train model
 .PHONY: model
 model: features validate-processed
-	$(PYTHON_INTERPRETER) -m ticket_urgency_classifier model
+	$(PYTHON_INTERPRETER) -m ticket_urgency_classifier.modeling.train
 
 
 ## Run batch predictions on input data
@@ -95,7 +95,7 @@ model: features validate-processed
 predict: model
 	@echo "Usage: make predict INPUT_PATH=path/to/input.csv"
 	@if [ -z "$(INPUT_PATH)" ]; then echo "Error: INPUT_PATH is required"; exit 1; fi
-	$(PYTHON_INTERPRETER) -m ticket_urgency_classifier predict batch --input $(INPUT_PATH)
+	$(PYTHON_INTERPRETER) -m ticket_urgency_classifier.modeling.predict batch --input $(INPUT_PATH)
 
 
 ## Serve the prediction API

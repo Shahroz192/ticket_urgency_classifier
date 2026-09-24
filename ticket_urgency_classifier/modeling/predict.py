@@ -14,6 +14,7 @@ from ticket_urgency_classifier.features import (
     engineer_features,
     generate_sentence_transformer_embeddings,
 )
+from ticket_urgency_classifier.modeling.thresholds import apply_thresholds
 
 app = typer.Typer()
 
@@ -130,32 +131,8 @@ def predict(
         for i, pred in enumerate(y_pred):
             y_proba[i, pred] = 1.0
 
-    class_names = label_encoder.classes_
-
-    if isinstance(threshold, dict):
-        default_class = "low"
-        if default_class not in class_names:
-            raise ValueError(f"Default class '{default_class}' not found.")
-        default_idx = list(class_names).index(default_class)
-        y_pred = np.full(len(X), default_idx, dtype=int)
-        for class_name, thresh_val in threshold.items():
-            if class_name == default_class:
-                continue
-            class_idx = list(class_names).index(class_name)
-            mask = y_proba[:, class_idx] >= thresh_val
-            y_pred[mask] = class_idx
-    else:
-        default_class = "low"
-        default_idx = list(class_names).index(default_class)
-        y_pred = np.full(len(X), default_idx, dtype=int)
-        low_mask = y_proba[:, default_idx] >= threshold
-        y_pred[low_mask] = default_idx
-        not_low_mask = ~low_mask
-        temp_proba = y_proba[not_low_mask].copy()
-        temp_proba[:, default_idx] = 0
-        if temp_proba.shape[0] > 0:
-            remaining_preds = np.argmax(temp_proba, axis=1)
-            y_pred[not_low_mask] = remaining_preds
+    class_names = list(label_encoder.classes_)
+    y_pred = apply_thresholds(y_proba, threshold, class_names)
 
     logger.success("Predictions made successfully.")
     return y_pred

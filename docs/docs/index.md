@@ -2,7 +2,7 @@
 
 ## Description
 
-classifies tickets based on the priority in classes : High Medium Low
+classifies tickets based on the priority in classes : Critical High Medium Low Very Low
 
 ## Commands
 

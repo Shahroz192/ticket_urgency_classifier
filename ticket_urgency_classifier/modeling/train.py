@@ -15,6 +15,7 @@ from sklearn.metrics import f1_score
 from sklearn.model_selection import (
     RandomizedSearchCV,
     StratifiedKFold,
+    train_test_split,
 )
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
@@ -25,13 +26,81 @@ from ticket_urgency_classifier.config import (
     MODELS_DIR,
     PROCESSED_DATA_DIR,
 )
+from ticket_urgency_classifier.modeling.thresholds import apply_thresholds, tune_thresholds
 
 app = typer.Typer()
 
 
+def _split_for_threshold_calibration(X_train, y_train, random_state=42):
+    """Reserve training rows for threshold calibration, separate from the test set."""
+    return train_test_split(
+        X_train,
+        y_train,
+        test_size=0.2,
+        random_state=random_state,
+        stratify=y_train,
+    )
+
+
+def _tune_thresholds(model, X_val, y_val, le):
+    """Tune per-class thresholds jointly on the validation set.
+
+    Maximizes weighted F1 over all classes (including 'low') via coordinate
+    ascent — no silent default class, no dict-order overwrite.
+    """
+    y_proba = model.predict_proba(X_val)
+    class_names = list(le.classes_)
+
+    y_pred_original = model.predict(X_val)
+    original_weighted_f1 = f1_score(y_val, y_pred_original, average="weighted")
+    logger.info(f"Original (argmax) Weighted F1-Score: {original_weighted_f1:.4f}")
+
+    best_thresholds = tune_thresholds(y_proba, y_val, class_names)
+
+    y_pred_thresholded = apply_thresholds(y_proba, best_thresholds, class_names)
+    thresholded_f1 = f1_score(y_val, y_pred_thresholded, average="weighted")
+    logger.info(f"Threshold-optimized Weighted F1-Score: {thresholded_f1:.4f}")
+    if thresholded_f1 > original_weighted_f1:
+        logger.info(f"Improvement over argmax: {thresholded_f1 - original_weighted_f1:.4f}")
+    else:
+        logger.info("No improvement over argmax.")
+
+    return best_thresholds, thresholded_f1
+
+
 @app.command()
-def main():
+def main(
+    tune_only: bool = typer.Option(False, "--tune-only", help="Skip training, only re-tune thresholds on the existing model."),
+):
     """Train the best Random Forest model with MLflow tracking."""
+    if tune_only is True:
+        logger.info("Tune-only mode: loading existing model and re-tuning thresholds.")
+        model_file = MODELS_DIR / "best_rf_model.joblib"
+        if not model_file.exists():
+            logger.error(f"Existing model not found at {model_file}. Run full training first.")
+            return
+        best_model = joblib.load(model_file)
+
+        train_file = PROCESSED_DATA_DIR / "train_features.csv"
+        if not train_file.exists():
+            logger.error(f"Training data not found at {train_file}. Run data preparation first.")
+            return
+        df_train = pd.read_csv(train_file)
+        X_train = df_train.drop(columns=["priority"])
+        y_train = df_train["priority"]
+        X_fit, X_val, y_fit, y_val = _split_for_threshold_calibration(X_train, y_train)
+        threshold_model = joblib.load(model_file)
+        threshold_model.fit(X_fit, y_fit)
+
+        le = joblib.load(MODELS_DIR / "label_encoder.joblib")
+        best_thresholds, _ = _tune_thresholds(threshold_model, X_val, y_val, le)
+
+        MODELS_DIR.mkdir(parents=True, exist_ok=True)
+        threshold_file = MODELS_DIR / "best_threshold.joblib"
+        joblib.dump(best_thresholds, threshold_file)
+        logger.success(f"Per-class thresholds saved to {threshold_file}")
+        return
+
     logger.info("Starting Random Forest model training...")
 
     config_path = Path(__file__).parent.parent / "config.yaml"
@@ -67,14 +136,15 @@ def main():
 
         df_train = pd.read_csv(train_file)
         logger.info(f"Loaded processed training data. Shape: {df_train.shape}")
-        df_test = pd.read_csv(PROCESSED_DATA_DIR / "test_features.csv")
-        logger.info(f"Loaded processed test data. Shape: {df_test.shape}")
-
         y_train = df_train["priority"]
         X_train = df_train.drop(columns=["priority"])
-        y_val = df_test["priority"]
-        X_val = df_test.drop(columns=["priority"])
         logger.info(f"X_train shape: {X_train.shape}, y_train shape: {y_train.shape}")
+
+        X_fit, X_val, y_fit, y_val = _split_for_threshold_calibration(
+            X_train,
+            y_train,
+            random_state=random_search_config["random_state"],
+        )
 
         categorical_features = ["language", "queue", "type", "queue_type_interaction"]
         numerical_features = [col for col in X_train.columns if col not in categorical_features]
@@ -122,64 +192,23 @@ def main():
 
         logger.info("Starting hyperparameter tuning with RandomizedSearchCV...")
         mlflow.sklearn.autolog()
-        random_search.fit(X_train, y_train)
+        random_search.fit(X_fit, y_fit)
         logger.success("Hyperparameter tuning complete.")
 
         best_model = random_search.best_estimator_
 
-        label_encoder_file = MODELS_DIR / "label_encoder.joblib"
-        le = joblib.load(label_encoder_file)
-        y_proba = best_model.predict_proba(X_val)
+        le = joblib.load(MODELS_DIR / "label_encoder.joblib")
+        best_thresholds, thresholded_f1 = _tune_thresholds(best_model, X_val, y_val, le)
 
-        class_names = le.classes_
-        try:
-            low_class_index = np.where(class_names == "low")[0][0]
-            _ = np.where(class_names == "high")[0][0]
-            _ = np.where(class_names == "medium")[0][0]
-        except IndexError:
-            logger.error(
-                "Error: Could not find 'low', 'high', or 'medium' class in label encoder."
-            )
-            raise
-
-        thresholds = np.arange(0.10, 0.51, 0.01)
-
-        best_threshold = 0.0
-        best_weighted_f1 = 0.0
-        original_weighted_f1 = None
-
-        y_pred_original = best_model.predict(X_val)
-        original_weighted_f1 = f1_score(y_val, y_pred_original, average="weighted")
-
-        logger.info(f"Original Weighted F1-Score: {original_weighted_f1:.4f}")
-        for thresh in thresholds:
-            y_pred_thresh = np.zeros(len(y_val), dtype=int)
-            low_mask = y_proba[:, low_class_index] >= thresh
-            y_pred_thresh[low_mask] = low_class_index
-            not_low_mask = ~low_mask
-            temp_proba = y_proba[not_low_mask].copy()
-            temp_proba[:, low_class_index] = 0
-            if temp_proba.shape[0] > 0:
-                remaining_preds = np.argmax(temp_proba, axis=1)
-                y_pred_thresh[not_low_mask] = remaining_preds
-            current_weighted_f1 = f1_score(y_val, y_pred_thresh, average="weighted")
-            if current_weighted_f1 > best_weighted_f1:
-                best_weighted_f1 = current_weighted_f1
-                best_threshold = thresh
-
-        if best_weighted_f1 <= original_weighted_f1:
-            best_threshold = 0.5
-            logger.info("No improvement found, best threshold remains at 0.5 (default).")
-        else:
-            logger.info(f"Best Threshold for 'low' class: {best_threshold:.2f}")
-            logger.info(f"Best Weighted F1-Score achieved: {best_weighted_f1:.4f}")
-            logger.info(f"Improvement: {best_weighted_f1 - original_weighted_f1:.4f}")
+        # Calibrate thresholds on held-out training rows, then use all training
+        # rows for the final model. The test split stays untouched until evaluation.
+        best_model.fit(X_train, y_train)
 
         MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
         threshold_file = MODELS_DIR / "best_threshold.joblib"
-        joblib.dump(best_threshold, threshold_file)
-        logger.success(f"Best threshold ({best_threshold:.4f}) saved to {threshold_file}")
+        joblib.dump(best_thresholds, threshold_file)
+        logger.success(f"Best per-class thresholds saved to {threshold_file}")
 
         best_model_file = MODELS_DIR / "best_rf_model.joblib"
         joblib.dump(best_model, best_model_file)
@@ -187,7 +216,8 @@ def main():
 
         mlflow.log_params(random_search.best_params_)
         mlflow.log_metric("best_cv_f1_weighted", random_search.best_score_)
-        mlflow.log_metric("best_threshold", best_threshold)
+        mlflow.log_metric("thresholded_f1_weighted", thresholded_f1)
+        mlflow.log_metrics({f"threshold_{k}": v for k, v in best_thresholds.items()})
         mlflow.sklearn.log_model(best_model, "model")
         mlflow.log_artifact(str(threshold_file))
         mlflow.log_artifact(str(best_model_file))

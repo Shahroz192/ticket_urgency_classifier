@@ -5,7 +5,6 @@ from loguru import logger
 import pandas as pd
 from sentence_transformers import SentenceTransformer
 from sklearn.preprocessing import LabelEncoder
-import torch
 import typer
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
@@ -15,6 +14,9 @@ from ticket_urgency_classifier.config import (
     PROCESSED_DATA_DIR,
     SENTENCE_TRANSFORMER_MODEL,
 )
+
+# Reusable sentiment analyzer (stateless, no need to reinitialize)
+_analyzer = SentimentIntensityAnalyzer()
 
 app = typer.Typer()
 
@@ -31,9 +33,8 @@ def engineer_features(df: pd.DataFrame) -> pd.DataFrame:
 
     df["full_text"] = df["subject"].fillna("") + " " + df["body"].fillna("")
 
-    analyzer = SentimentIntensityAnalyzer()
     df["sentiment_score"] = df["full_text"].apply(
-        lambda x: analyzer.polarity_scores(x)["compound"]
+        lambda x: _analyzer.polarity_scores(x)["compound"]
     )
     df["word_count"] = df["full_text"].apply(lambda x: len(x.split()))
     df["exclamation_count"] = df["full_text"].str.count("!")
@@ -111,10 +112,9 @@ def generate_sentence_transformer_embeddings(
             logger.info(f"Loading cached embeddings from {st_file}...")
             return pd.read_parquet(st_file)
 
-    # Generate embeddings (always in memory)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    logger.info(f"Using device: {device}")
-    embedder = SentenceTransformer(SENTENCE_TRANSFORMER_MODEL, device=device)
+    # Generate embeddings (always in memory, force CPU to avoid CUDA issues)
+    logger.info("Using device: cpu")
+    embedder = SentenceTransformer(SENTENCE_TRANSFORMER_MODEL, device="cpu")
 
     text_embeddings = embedder.encode(
         df["full_text"].tolist(),
@@ -133,20 +133,14 @@ def generate_sentence_transformer_embeddings(
     return df_embeddings
 
 
-def clean_feature_names(df: pd.DataFrame) -> pd.DataFrame:
-    """Ensure all column names are strings, required for ColumnTransformer."""
-    df.columns = [str(col) for col in df.columns]
-    return df
-
-
 @app.command()
 def main():
     """Main function to orchestrate feature engineering and vectorization."""
     logger.info("Starting comprehensive feature engineering (including vectorization)...")
 
-    # 1. Load data
-    train_file = PROCESSED_DATA_DIR / "train.csv"
-    test_file = PROCESSED_DATA_DIR / "test.csv"
+    # 1. Load data from interim directory
+    train_file = INTERIM_DATA_DIR / "train.csv"
+    test_file = INTERIM_DATA_DIR / "test.csv"
 
     if not train_file.exists() or not test_file.exists():
         logger.error("Interim train or test data not found. Run dataset processing first.")

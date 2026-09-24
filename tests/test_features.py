@@ -61,24 +61,21 @@ def test_add_tag_features():
 
 
 @patch("ticket_urgency_classifier.features.SentenceTransformer")
-@patch("ticket_urgency_classifier.features.torch.cuda.is_available")
 @patch("ticket_urgency_classifier.features.pd.DataFrame.to_parquet")
 @patch("pathlib.Path.exists")
 def test_generate_sentence_transformer_embeddings(
-    mock_exists, mock_to_parquet, mock_is_available, mock_sentence_transformer
+    mock_exists, mock_to_parquet, mock_sentence_transformer
 ):
     mock_exists.return_value = False
-    mock_is_available.return_value = False
     mock_embedder = MagicMock()
     mock_embedder.encode.return_value = np.array([[0.1, 0.2], [0.3, 0.4]])
     mock_sentence_transformer.return_value = mock_embedder
 
     data = {"full_text": ["some text", "some other text"]}
     df = pd.DataFrame(data)
-    config = {}
     data_split = "test"
 
-    df_embeddings = generate_sentence_transformer_embeddings(df, config, data_split)
+    df_embeddings = generate_sentence_transformer_embeddings(df, data_split)
 
     assert "emb_0" in df_embeddings.columns
     assert "emb_1" in df_embeddings.columns

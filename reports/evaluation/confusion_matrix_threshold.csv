@@ -1,0 +1,6 @@
+,critical,high,low,medium,very_low
+critical,349,31,0,3,0
+high,67,2901,106,660,0
+low,1,218,1459,515,15
+medium,4,568,180,3266,1
+very_low,1,0,29,4,322

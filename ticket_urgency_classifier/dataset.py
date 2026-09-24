@@ -30,6 +30,10 @@ def main():
     logger.info("Cleaning data...")
     df = df_raw.copy()
     df.drop(columns=["version", "answer"], inplace=True, errors="ignore")
+    # Normalize missing ticket types before split so downstream OHE/interactions
+    # never see NaN. Rows must not be dropped: null type covers all critical/very_low.
+    if "type" in df.columns:
+        df["type"] = df["type"].fillna("unknown")
     df.drop_duplicates(inplace=True)
     df.reset_index(drop=True, inplace=True)
     logger.info(f"Data shape after cleaning: {df.shape}")

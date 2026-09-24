@@ -4,17 +4,17 @@
 [![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=flat&logo=docker&logoColor=white)](https://hub.docker.com/r/shahroz192/ticket-urgency-classifier)
 [![License](https://img.shields.io/github/license/shahroz192/ticket_urgency_classifier)](LICENSE)
 
-Classifies tickets based on the priority in classes: High, Medium, Low
+Classifies tickets based on the priority in classes: Critical, High, Medium, Low, Very Low
 
 ## Description
 
-The Ticket Urgency Classifier is a machine learning system that automatically categorizes customer support tickets into priority levels (High, Medium, Low) based on their content and metadata. This helps support teams efficiently triage tickets and respond to urgent issues faster.
+The Ticket Urgency Classifier is a machine learning system that automatically categorizes customer support tickets into priority levels (Critical, High, Medium, Low, Very Low) based on their content and metadata. This helps support teams efficiently triage tickets and respond to urgent issues faster.
 
 The system uses advanced natural language processing techniques and machine learning algorithms to analyze ticket subjects, bodies, and other metadata to determine urgency. It's designed to be easily deployable and integrable into existing support workflows.
 
 ## Key Features
 
-- **Multi-class Classification**: Accurately classifies tickets into High, Medium, and Low priority categories
+- **Multi-class Classification**: Accurately classifies tickets into Critical, High, Medium, Low, and Very Low priority categories
 - **Advanced NLP**: Uses Sentence Transformers for semantic understanding of ticket content
 - **Feature Engineering**: Extracts meaningful features from ticket metadata, keywords, and sentiment analysis
 - **RESTful API**: Provides a FastAPI-based web service for real-time predictions
