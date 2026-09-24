@@ -8,6 +8,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import mlflow
 import numpy as np
 import pandas as pd
 from sklearn.dummy import DummyClassifier
@@ -180,6 +181,29 @@ def main():
     with open(EVAL_DIR / "metrics.json", "w") as f:
         json.dump(metrics, f, indent=2)
 
+    # Log test metrics to MLflow so feature changes are comparable run-to-run
+    # (train.py logs val CV/thresholded F1; evaluate was silent until now).
+    try:
+        mlflow.set_experiment("ticket_urgency_classifier")
+        with mlflow.start_run(run_name="evaluate-test"):
+            mlflow.log_metrics(
+                {
+                    "test_threshold_accuracy": float(threshold_accuracy),
+                    "test_threshold_f1_weighted": float(threshold_f1),
+                    "test_argmax_accuracy": float(initial_accuracy),
+                    "test_argmax_f1_weighted": float(initial_f1),
+                    "test_dummy_prior_f1_weighted": float(dummy_prior_f1),
+                    "test_dummy_stratified_f1_weighted": float(dummy_strat_f1),
+                }
+            )
+            if isinstance(best_thresholds, dict):
+                mlflow.log_metrics(
+                    {f"threshold_{k}": float(v) for k, v in best_thresholds.items()}
+                )
+            mlflow.log_artifact(str(EVAL_DIR / "metrics.json"))
+    except Exception as exc:  # MLflow must never fail the evaluation itself
+        logger.warning(f"MLflow test-metric logging skipped: {exc}")
+
     pd.DataFrame(report_th).T.to_csv(EVAL_DIR / "classification_report_threshold.csv")
     pd.DataFrame(report_am).T.to_csv(EVAL_DIR / "classification_report_argmax.csv")
 
@@ -195,6 +219,7 @@ def main():
     pd.DataFrame(cm_am, index=class_names, columns=class_names).to_csv(
         EVAL_DIR / "confusion_matrix_argmax.csv"
     )
+
     logger.success(f"Evaluation artifacts written to {EVAL_DIR}")
 
 
