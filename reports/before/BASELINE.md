@@ -50,3 +50,15 @@ Experiment `ticket_urgency_classifier` logs **train/val** metrics only:
 
 - `reports/before/metrics_before_de_features.json`
 - `reports/evaluation/metrics.json` (same numbers until re-evaluated)
+
+## MLflow baseline (last full train before DE features)
+
+Run `fd3befbe` (awesome-wren-280):
+- `best_cv_f1_weighted` = 0.6883
+- `thresholded_f1_weighted` (val) = 0.7187
+
+Later toy/test runs (cv=0.99) are not comparable.
+
+After DE feature changes: retrain (full-pipeline train) → new MLflow run
+will show val CV + thresholded F1; evaluate updates test metrics.json.
+Compare both to this baseline.

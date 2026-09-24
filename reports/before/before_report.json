@@ -40,5 +40,17 @@
     "medium": 0.42000000000000004,
     "very_low": 0.24000000000000002
   },
-  "mlflow_note": "evaluate.py does not log to MLflow; test metrics compared via this report + reports/evaluation/metrics.json. train.py logs best_cv_f1_weighted and thresholded_f1_weighted (val split) per run."
+  "mlflow_note": "evaluate.py does not log to MLflow; test metrics compared via this report + reports/evaluation/metrics.json. train.py logs best_cv_f1_weighted and thresholded_f1_weighted (val split) per run.",
+  "mlflow_baseline": {
+    "note": "last full train run before DE features",
+    "run": "fd3befbecf4546fdaf2b9d4ef98d8c16",
+    "best_cv_f1_weighted": 0.6883456306934524,
+    "thresholded_f1_weighted_val": 0.7187343258344563,
+    "metrics_logged": [
+      "best_cv_f1_weighted",
+      "thresholded_f1_weighted",
+      "threshold_*"
+    ],
+    "test_metrics_not_in_mlflow": true
+  }
 }
